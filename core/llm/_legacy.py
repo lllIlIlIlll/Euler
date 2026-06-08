@@ -2,31 +2,13 @@ import os, json, re, time, requests, sys, threading, urllib3, base64, importlib,
 from datetime import datetime
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 _RESP_CACHE_KEY = str(uuid.uuid4())
-_CORE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # core/ — this file lives in core/llm/
+from .config import _CORE_DIR, safeprint, reload_ekeys  # config leaf module
+print = safeprint
 
-def _load_ekeys():
-    global _ekey_path
-    try:
-        import ekey; importlib.reload(ekey); _ekey_path = ekey.__file__
-        return {k: v for k, v in vars(ekey).items() if not k.startswith('_')}
-    except ImportError: pass
-    _ekey_path = p = os.path.join(_CORE_DIR, 'ekey.json')
-    if not os.path.exists(p): raise Exception('[ERROR] ekey.py or ekey.json not found, please create one from ekey_template.')
-    with open(p, encoding='utf-8') as f: return json.load(f)
-
-_ekey_path = _ekey_mtime = None
-def reload_ekeys():
-    global _ekey_mtime
-    mt = os.stat(_ekey_path).st_mtime_ns if _ekey_path else -1
-    if mt == _ekey_mtime: return globals().get('ekeys', {}), False
-    mk = _load_ekeys(); _ekey_mtime = os.stat(_ekey_path).st_mtime_ns
-    print(f'[Info] Load ekeys from {_ekey_path}')
-    globals().update(ekeys=mk)
-    return mk, True
-
-def __getattr__(name):  # once guard in PEP 562
+def __getattr__(name):  # PEP 562: lazy 'ekeys' + delegate config-only names
     if name == 'ekeys': return reload_ekeys()[0]
-    raise AttributeError(f"module 'llmcore' has no attribute {name}")
+    from . import config
+    return getattr(config, name)
 
 def compress_history_tags(messages, keep_recent=10, max_len=800, force=False, interval=5):
     """Compress <thinking>/<tool_use>/<tool_result> tags in older messages to save tokens."""
@@ -78,12 +60,6 @@ def _sanitize_leading_user_msg(msg):
         elif block.get('type') == 'text': texts.append(block.get('text', ''))
     msg['content'] = [{"type": "text", "text": '\n'.join(t for t in texts if t)}]
     return msg
-
-_oldprint = print
-def safeprint(*argv):
-    try: _oldprint(*argv)
-    except OSError: pass
-print = safeprint
 
 def trim_messages_history(history, sess):
     cap = sess.context_win * 3
