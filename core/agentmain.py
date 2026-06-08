@@ -7,7 +7,7 @@ elif hasattr(sys.stderr, 'reconfigure'): sys.stderr.reconfigure(errors='replace'
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # project root for plugins/
 
-from llmcore import reload_mykeys, LLMSession, ToolClient, ClaudeSession, MixinSession, NativeToolClient, NativeClaudeSession, NativeOAISession, resolve_client
+from llmcore import reload_ekeys, LLMSession, ToolClient, ClaudeSession, MixinSession, NativeToolClient, NativeClaudeSession, NativeOAISession, resolve_client
 from agent_loop import agent_runner_loop
 try:
     from plugins.hooks import discover_and_load; discover_and_load()
@@ -57,7 +57,7 @@ class EulerAgent:
         self.load_llm_sessions()
 
     def load_llm_sessions(self):
-        ekeys, changed = reload_mykeys()
+        ekeys, changed = reload_ekeys()
         if not changed and hasattr(self, 'llmclients'): return
         try: oldhistory = self.llmclient.backend.history
         except: oldhistory = None
