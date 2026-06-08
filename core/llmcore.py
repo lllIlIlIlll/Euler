@@ -154,7 +154,7 @@ def _parse_claude_sse(resp_lines):
             if current_block:
                 if current_block["type"] == "tool_use":
                     try: current_block["input"] = json.loads(tool_json_buf) if tool_json_buf else {}
-                    except: current_block["input"] = {"_raw": tool_json_buf}
+                    except json.JSONDecodeError: current_block["input"] = {"_raw": tool_json_buf}
                 content_blocks.append(current_block)
                 current_block = None
         elif evt_type == "message_delta":
@@ -174,7 +174,7 @@ def _parse_claude_sse(resp_lines):
     if current_block:
         if current_block["type"] == "tool_use":
             try: current_block["input"] = json.loads(tool_json_buf) if tool_json_buf else {}
-            except: current_block["input"] = {"_raw": tool_json_buf}
+            except json.JSONDecodeError: current_block["input"] = {"_raw": tool_json_buf}
         content_blocks.append(current_block); current_block = None
     if warn:
         print(f"[WARN] {warn.strip()}")
@@ -186,13 +186,13 @@ def _try_parse_tool_args(raw):
     Returns list of parsed dicts."""
     if not raw: return [{}]
     try: return [json.loads(raw)]
-    except: pass
+    except json.JSONDecodeError: pass
     parts = re.split(r'(?<=\})(?=\{)', raw)
     if len(parts) > 1:
         parsed = []
         for p in parts:
             try: parsed.append(json.loads(p))
-            except: return [{"_raw": raw}]
+            except json.JSONDecodeError: return [{"_raw": raw}]
         return parsed
     return [{"_raw": raw}]
 
@@ -211,7 +211,7 @@ def _parse_openai_sse(resp_lines, api_mode="chat_completions"):
             data_str = line[5:].lstrip()
             if data_str == "[DONE]": break
             try: evt = json.loads(data_str)
-            except: continue
+            except json.JSONDecodeError: continue
             etype = evt.get("type", "")
             if etype == "response.output_text.delta":
                 delta = evt.get("delta", "")
@@ -260,7 +260,7 @@ def _parse_openai_sse(resp_lines, api_mode="chat_completions"):
             data_str = line[5:].lstrip()
             if data_str == "[DONE]": break
             try: evt = json.loads(data_str)
-            except: continue
+            except json.JSONDecodeError: continue
             ch = (evt.get("choices") or [{}])[0]
             delta = ch.get("delta") or {}
             if delta.get("reasoning_content"):
@@ -317,7 +317,7 @@ def _parse_openai_json(data, api_mode="chat_completions"):
                         blocks.append({"type": "text", "text": p["text"]}); yield p["text"]
             elif item.get("type") == "function_call":
                 try: args = json.loads(item.get("arguments", "")) if item.get("arguments") else {}
-                except: args = {"_raw": item.get("arguments", "")}
+                except json.JSONDecodeError: args = {"_raw": item.get("arguments", "")}
                 blocks.append({"type": "tool_use", "id": item.get("call_id", item.get("id", "")),
                                "name": item.get("name", ""), "input": args})
     else:
@@ -332,7 +332,7 @@ def _parse_openai_json(data, api_mode="chat_completions"):
         for tc in (msg.get("tool_calls") or []):
             fn = tc.get("function", {})
             try: args = json.loads(fn.get("arguments", "")) if fn.get("arguments") else {}
-            except: args = {"_raw": fn.get("arguments", "")}
+            except json.JSONDecodeError: args = {"_raw": fn.get("arguments", "")}
             blocks.append({"type": "tool_use", "id": tc.get("id", ""), "name": fn.get("name", ""), "input": args})
     return blocks
 
@@ -353,7 +353,7 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
     _RETRYABLE = {408, 409, 425, 429, 500, 502, 503, 504, 529}
     def _delay(resp, attempt):
         try: ra = float((resp.headers or {}).get("retry-after"))
-        except: ra = None
+        except (TypeError, ValueError): ra = None
         return max(0.5, ra if ra is not None else min(30.0, 1.5 * (2 ** attempt)))
     for attempt in range(sess.max_retries + 1):
         streamed = False
@@ -366,7 +366,7 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
                         print(f"[LLM Retry] HTTP {r.status_code}, retry in {d:.1f}s ({attempt+1}/{sess.max_retries+1})")
                         time.sleep(d); continue
                     try: body = r.text.strip()[:500]
-                    except: body = ""
+                    except requests.RequestException: body = ""
                     err = f"!!!Error: HTTP {r.status_code}" + (f": {body}" if body else "")
                     yield err; return [{"type": "text", "text": err}]
                 gen = parse_fn(r)
@@ -852,7 +852,7 @@ def _parse_text_tool_calls(content):
             idx = content.index(_jp); raw = json.loads(content[idx:])
             tcs = [MockToolCall(b["name"], b.get("input", {}), id=b.get("id", "")) for b in raw if b.get("type") == "tool_use"]
             return tcs, content[:idx].strip()
-        except: pass
+        except json.JSONDecodeError: pass
     # try XML tags: <tool_call>{"name":..., "arguments":...}</tool_call>
     _xp = r"<(?:tool_use|tool_call)>((?:(?!<(?:tool_use|tool_call)>).){15,}?)</(?:tool_use|tool_call)>"
     for s in re.findall(_xp, content, re.DOTALL):
@@ -860,7 +860,7 @@ def _parse_text_tool_calls(content):
             d = tryparse(s.strip()); name = d.get('name')
             args = d.get('arguments') or d.get('args') or d.get('input') or {}
             if name: tcs.append(MockToolCall(name, args))
-        except: pass
+        except json.JSONDecodeError: pass
     if tcs: content = re.sub(_xp, "", content, flags=re.DOTALL).strip()
     return tcs, content
 
@@ -884,12 +884,12 @@ def _write_llm_log(label, content, log_path=None):
 
 def tryparse(json_str):
     try: return json.loads(json_str)
-    except: pass
+    except json.JSONDecodeError: pass
     json_str = json_str.strip().strip('`').replace('json\n', '', 1).strip()
     try: return json.loads(json_str)
-    except: pass
+    except json.JSONDecodeError: pass
     try: return json.loads(json_str[:-1])
-    except: pass
+    except json.JSONDecodeError: pass
     if '}' in json_str: json_str = json_str[:json_str.rfind('}') + 1]
     return json.loads(json_str)
 
