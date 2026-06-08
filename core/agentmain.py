@@ -11,7 +11,7 @@ from llmcore import reload_ekeys, LLMSession, ToolClient, ClaudeSession, MixinSe
 from agent_loop import agent_runner_loop
 try:
     from plugins.hooks import discover_and_load; discover_and_load()
-except Exception: pass
+except Exception as e: print(f'[WARN] plugin discover failed: {e}')
 from ea import EulerAgentHandler, smart_format, get_global_memory, format_error, consume_file
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -35,7 +35,7 @@ if not os.path.exists(cdp_cfg):
     try:
         os.makedirs(os.path.dirname(cdp_cfg), exist_ok=True)
         open(cdp_cfg, 'w', encoding='utf-8').write(f"const TID = '__ljq_{hex(random.randint(0, 99999999))[2:8]}';")
-    except Exception as e: print(f'[WARN] CDP config init failed: {e} — advanced web features (tmwebdriver) will be unavailable.')
+    except OSError as e: print(f'[WARN] CDP config init failed: {e} — advanced web features (tmwebdriver) will be unavailable.')
 
 def get_system_prompt():
     with open(os.path.join(script_dir, f'../assets/prompts/sys_prompt{lang_suffix}.txt'), 'r', encoding='utf-8') as f: prompt = f.read()
@@ -66,7 +66,7 @@ class EulerAgent:
             try:
                 if 'mixin' in k: llm_sessions += [{'mixin_cfg': cfg}]
                 elif c := resolve_client(k): llm_sessions += [c]
-            except: pass
+            except Exception as e: print(f'[WARN] skip config {k}: {e}')
         for i, s in enumerate(llm_sessions):
             if isinstance(s, dict) and 'mixin_cfg' in s:
                 try:
@@ -265,7 +265,7 @@ if __name__ == '__main__':
             if getattr(mod, 'ONCE', False): print('[Reflect] ONCE=True, exiting.'); break
     else:
         try: import readline
-        except Exception: pass
+        except ImportError: pass
         agent.inc_out = True
         if sys.stdout.isatty():
             try: model = agent.get_llm_name(model=True) or '?'
@@ -274,7 +274,7 @@ if __name__ == '__main__':
                 sys.stdout.write(f'\x1b[92m✦\x1b[0m \x1b[1mEulerAgent\x1b[0m '
                                  f'\x1b[90m· cli · model:\x1b[0m {model}\n')
                 sys.stdout.flush()
-            except Exception: pass
+            except OSError: pass
         while True:
             q = input('> ').strip()
             if not q: continue
