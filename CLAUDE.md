@@ -14,6 +14,10 @@ EulerAgent/
 │   ├── agentmain.py          # Application entry point
 │   ├── agent_loop.py         # Loop engine (~127 lines)
 │   ├── ea.py                 # Tool implementations (~589 lines)
+│   ├── llm/                  # LLM adapter package (sessions, codecs, tool clients)
+│   │   ├── __init__.py       #   public facade
+│   │   └── _legacy.py        #   implementation (Strangler split in progress)
+│   ├── llmcore.py            # Compat shim → llm package
 │   ├── handlers/             # Handler extension point (BaseHandler pattern)
 │   └── README.md
 ├── memory/                   # Layered memory system (L1-L4)
@@ -29,7 +33,6 @@ EulerAgent/
 │   ├── stapp2.py             # Streamlit frontend
 │   ├── tuiapp_v2.py          # Textual TUI frontend
 │   └── *.py                  # Bot frontends (telegram, qq, wechat, etc.)
-├── llmcore.py                # LLM adapter (root level for import compatibility)
 └── TMWebDriver.py            # Browser control (root level)
 ```
 
@@ -97,16 +100,17 @@ os.path.join(script_dir, '../temp/...')     # NOT 'temp/...'
 
 ## Import Notes
 
-```python
-# From root level files:
-from llmcore import ...
+`core/agentmain.py` inserts `core/` itself at the front of `sys.path`, so sibling
+modules import by bare name — there is **no** `core.` package prefix anywhere in the repo:
 
-# From core/ modules:
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from core.llmcore import ...
-from core.agent_loop import ...
-from core.ga import ...
+```python
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # core/ becomes top-level
+from llmcore import reload_ekeys, LLMSession, ...   # core/llmcore.py (shim → llm package)
+from agent_loop import agent_runner_loop            # core/agent_loop.py
+from ea import EulerAgentHandler                    # core/ea.py
 ```
+
+`llmcore` is a compatibility shim; the implementation lives in the `core/llm/` package.
 
 ## PR Checklist
 
