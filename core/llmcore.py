@@ -837,7 +837,6 @@ Follow these steps to think and act:
                 except json.JSONDecodeError:
                     errors.append(f'Failed to parse tool_use JSON: {json_str[:200]}')
                     self.last_tools = ''
-                except: pass
             if not tool_calls:
                 for e in errors:
                     print(f"[Warn] {e}"); tool_calls.append(MockToolCall('bad_json', {'msg': e}))

@@ -59,8 +59,7 @@ class EulerAgent:
     def load_llm_sessions(self):
         ekeys, changed = reload_ekeys()
         if not changed and hasattr(self, 'llmclients'): return
-        try: oldhistory = self.llmclient.backend.history
-        except: oldhistory = None
+        oldhistory = getattr(getattr(getattr(self, 'llmclient', None), 'backend', None), 'history', None)
         llm_sessions = []
         for k, cfg in ekeys.items():
             if not any(x in k for x in ['api', 'config', 'cookie']): continue
@@ -85,7 +84,7 @@ class EulerAgent:
         lastc = self.llmclient
         self.llmclient = self.llmclients[self.llm_no]
         try: self.llmclient.backend.history = lastc.backend.history
-        except: raise Exception('[ERROR] BAD Mixin config: Check your ekey.py')
+        except Exception as e: raise RuntimeError('[ERROR] BAD Mixin config: Check your ekey.py') from e
         self.llmclient.last_tools = ''
         name = self.get_llm_name(model=True)
         if 'glm' in name or 'minimax' in name or 'kimi' in name: load_tool_schema('_cn')
