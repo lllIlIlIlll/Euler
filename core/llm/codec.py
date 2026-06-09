@@ -9,6 +9,14 @@ from .wire import _record_usage
 from .models import model_caps
 print = safeprint
 
+__all__ = [  # explicit so `from .codec import *` carries the private (_-prefixed) helpers too
+    '_parse_claude_json', '_parse_claude_sse', '_try_parse_tool_args', '_parse_openai_sse',
+    '_parse_openai_json', '_stamp_oai_cache_markers', '_prepare_oai_tools', '_to_responses_input',
+    '_msgs_claude2oai', '_keep_claude_block', '_drop_unsigned_thinking', '_ensure_thinking_blocks',
+    '_fix_messages', 'openai_tools_to_claude', 'tryparse',
+    'MockFunction', 'MockToolCall', 'MockResponse', '_ensure_text_block', '_parse_text_tool_calls',
+]
+
 
 def _parse_claude_json(data):
     content_blocks = data.get("content", [])
