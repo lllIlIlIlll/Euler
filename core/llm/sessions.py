@@ -5,7 +5,7 @@ wire transport, decoding via codec. Depends on config/wire/history/models/codec.
 """
 import json, re, threading, uuid
 from .config import safeprint
-from .wire import auto_make_url, _stream_with_retry, _write_llm_log
+from .wire import auto_make_url, _stream_with_retry
 from .history import trim_messages_history
 from .models import model_caps
 from .codec import *

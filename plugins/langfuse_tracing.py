@@ -10,8 +10,8 @@ Usage tracking (SSE parser wrapping) stays as internal llmcore patch.
 import threading, sys
 
 try:
-    from llmcore import _load_mykeys
-    _cfg = _load_mykeys().get('langfuse_config')
+    from llmcore import _load_ekeys
+    _cfg = _load_ekeys().get('langfuse_config')
     from langfuse import Langfuse
     _lf = Langfuse(**_cfg) if _cfg else None
 except Exception:
