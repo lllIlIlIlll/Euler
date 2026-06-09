@@ -14,9 +14,15 @@ EulerAgent/
 │   ├── agentmain.py          # Application entry point
 │   ├── agent_loop.py         # Loop engine (~127 lines)
 │   ├── ea.py                 # Tool implementations (~589 lines)
-│   ├── llm/                  # LLM adapter package (sessions, codecs, tool clients)
-│   │   ├── __init__.py       #   public facade
-│   │   └── _legacy.py        #   implementation (Strangler split in progress)
+│   ├── llm/                  # LLM adapter package (layered, single-direction deps)
+│   │   ├── __init__.py       #   public facade (re-exports the layers)
+│   │   ├── config.py         #   ekey loading + safeprint
+│   │   ├── models.py         #   model capability table (D4)
+│   │   ├── history.py        #   context compress / trim
+│   │   ├── wire.py           #   HTTP/SSE transport + retry
+│   │   ├── codec.py          #   protocol encode/decode + Mock* + parsing
+│   │   ├── sessions.py       #   BaseSession + backend sessions
+│   │   └── clients.py        #   tool clients + resolve_*
 │   ├── llmcore.py            # Compat shim → llm package
 │   ├── handlers/             # Handler extension point (BaseHandler pattern)
 │   └── README.md
