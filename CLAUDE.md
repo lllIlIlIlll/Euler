@@ -24,8 +24,6 @@ EulerAgent/
 │   │   ├── sessions.py       #   BaseSession + backend sessions
 │   │   └── clients.py        #   tool clients + resolve_*
 │   ├── llmcore.py            # Compat shim → llm package
-│   ├── handlers/             # Handler extension point (BaseHandler pattern)
-│   └── README.md
 ├── memory/                   # Layered memory system (L1-L4)
 │   ├── *.sop.md              # SOP documents
 │   ├── global_mem*.txt       # Global memory

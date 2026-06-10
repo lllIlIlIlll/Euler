@@ -13,7 +13,7 @@ compatibility shim.
 |---|---:|---|
 | `agentmain.py` | 299 | `EulerAgent` class — the application entry point. Builds the system prompt, wires the LLM client, and kicks off the loop. |
 | `agent_loop.py` | 136 | `agent_runner_loop` — the perceive → reason → act → record loop. The single hot path. |
-| `ea.py` | 619 | `EulerAgentHandler` — implementation of the 9 atomic tools (`code_run`, `file_read/write/patch`, `web_scan`, `web_execute_js`, `ask_user`, plus the two memory hooks). |
+| `ea.py` | 619 | `EulerAgentHandler` — tool implementations. 9 atomic tools in two shapes: 6 module-level functions (`code_run`, `file_read`, `file_patch`, `web_scan`, `web_execute_js`, `ask_user`) and 3 `do_*` methods on the handler class (`file_write`, `update_working_checkpoint`, `start_long_term_update`). |
 | `llmcore.py` | 11 | **Compat shim** — `from llmcore import ...` keeps working. Forwards to `llm/` package via `__getattr__`. New code should import from `llm` directly. |
 
 ## `llm/` — LLM adapter package
@@ -34,11 +34,6 @@ Layering (lower cannot import higher):
 ```
 config → models → codec → history → wire → sessions → clients
 ```
-
-## `handlers/`
-
-Reserved for the `BaseHandler` extension pattern. Currently empty; concrete
-handlers live inside `ea.py` until the pattern stabilises.
 
 ## Path rules (do not break)
 
