@@ -1,8 +1,16 @@
-import json, threading, time, uuid, queue, socket, requests, traceback
+import os, re, json, threading, time, uuid, queue, socket, requests, traceback
 from typing import Any
 from simple_websocket_server import WebSocketServer, WebSocket
 import bottle
 from bottle import request
+
+def _read_link_token():
+    """Shared secret from the CDP bridge config; master & remote client read the same file."""
+    try:
+        cfg = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets/tmwd_cdp_bridge/config.js')
+        m = re.search(r"'(__ljq_\w+)'", open(cfg, encoding='utf-8').read())
+        return m.group(1) if m else None
+    except OSError: return None
 
 class Session:
     def __init__(self, session_id, info, client=None):
@@ -38,11 +46,13 @@ class TMWebDriver:
         self.host, self.port = host, port
         self.sessions, self.results, self.acks = {}, {}, {}
         self._lock = threading.RLock()  # guards self.sessions add/del/iterate across WS+HTTP+agent threads
+        self._link_token = _read_link_token()
         self.default_session_id = None
-        self.latest_session_id = None  
+        self.latest_session_id = None
         self.is_remote = socket.socket().connect_ex((host, port+1)) == 0
-        if not self.is_remote:  
-            self.start_ws_server()  
+        if not self.is_remote:
+            if not self._link_token: print("[WARN] no CDP token (assets/tmwd_cdp_bridge/config.js missing); /link is unauthenticated")
+            self.start_ws_server()
             self.start_http_server()
         else:
             self.remote = f'http://{self.host}:{self.port+1}/link'
@@ -87,7 +97,9 @@ class TMWebDriver:
         @app.route('/link', method=['GET','POST'])
         def link():
             data = request.json
-            if data.get('cmd') == 'get_all_sessions': return json.dumps({'r': self.get_all_sessions()}, ensure_ascii=False)  
+            if self._link_token and data.get('token') != self._link_token:
+                bottle.response.status = 403; return 'forbidden'
+            if data.get('cmd') == 'get_all_sessions': return json.dumps({'r': self.get_all_sessions()}, ensure_ascii=False)
             if data.get('cmd') == 'find_session': 
                 url_pattern = data.get('url_pattern', '')
                 return json.dumps({'r': self.find_session(url_pattern)}, ensure_ascii=False)
@@ -245,6 +257,7 @@ class TMWebDriver:
         return rr
     
     def _remote_cmd(self, cmd):
+        if self._link_token: cmd = {**cmd, 'token': self._link_token}
         try: return requests.post(self.remote, headers={"Content-Type": "application/json"}, json=cmd, timeout=30).json()
         except (ConnectionError, requests.exceptions.ConnectionError):
             raise ConnectionError("TMWebDriver master未运行，看tmwebdriver_sop启动master")

@@ -22,11 +22,11 @@
 | ✅ | P0 | F3 | `/session.k=v` 字段白名单 | 单函数 |
 | ✅ | P1 | F4 | `code_run` 审计日志 + 无人值守高危闸门 | 新增一个边界点 |
 | ✅ | P1 | F5 | 裸 `except:` 收敛为精确异常类型 | 分散但每处 1 行 |
-| ⬜ | P2 | F6 | TMWebDriver `/link` + agent_bbs 收紧网络暴露面 | 局部 |
-| ⬜ | P2 | F7 | inline_eval 去全局 `os.chdir`；loop 内 `json.loads` 容错 | 两处局部 |
+| ✅ | P2 | F6 | TMWebDriver `/link` token + agent_bbs 收紧网络暴露面 | 局部 |
+| ◐ | P2 | F7 | loop 内 `json.loads` 容错（done）；inline_eval `os.chdir`（评估保留） | 局部 |
 | ⬜ | P3 | F8 | 日志路径双轨统一；`file_access_stats` 并发安全；DEBUG 噪声 | 杂项 |
 
-> F1–F5 已实现（commit `1a2af2f` + `b7160cf`）。下文各节"方案"为原始设计；F4/F5 的**实际落地说明**见对应章节末尾。
+> F1–F6 + F7b 已实现（commit `1a2af2f` / `b7160cf` / 本批）。下文各节"方案"为原始设计；F4/F5/F6/F7 的**实际落地说明**见对应章节末尾。
 
 ---
 
@@ -135,6 +135,10 @@
 
 **改动半径**：`/link` 一处校验；agent_bbs 一行 + 文档。
 
+> **实际落地（本批 commit）**：
+> - `/link`：`_read_link_token()` 从 `assets/tmwd_cdp_bridge/config.js` 提取随机 `__ljq_xxxx`（master 与 remote client 读同一文件 → 天然共享 secret）。`/link` 校验 `data.token`，不匹配返回 403；`_remote_cmd` 自动带 token。config.js 缺失时降级为不校验并打 WARN（向后兼容裸跑）。验证：无 token / 错 token → 403，正确 token → 200。
+> - agent_bbs：`host=os.environ.get("BBS_HOST", "127.0.0.1")`、`port` 同理走 env，默认仅本机；顶部启动注释同步（默认 board key 公开，故默认不该绑 0.0.0.0）。
+
 ---
 
 ### F7. inline_eval 全局 `os.chdir`；loop 内 `json.loads` 隐式不变量
@@ -148,6 +152,10 @@
 - loop：把 `json.loads(...)` 换成 codec 已有的 `tryparse`（[codec.py:388](../core/llm/codec.py)），与项目"容忍脏 JSON"的整体风格一致。
 
 **改动半径**：两处各 1-3 行。
+
+> **实际落地（本批 commit）**：
+> - **F7b done**：`agent_loop._safe_tool_args` 包住 `json.loads(tc.function.arguments)`，坏 JSON/None → `{'_raw': raw}`，让 `do_*` 走各自的 missing 分支而非崩整轮。当前所有路径经 `MockToolCall`（合法 `json.dumps`）故是面向未来的防御；零额外依赖（未引入 codec）。
+> - **F7a 评估后保留**：inline_eval 的价值正是"进程内访问 `handler`/`parent` 做内省"，无法子进程化；而 `os.chdir` 是进程级、`eval/exec` 无法注入局部 cwd，没有干净的隔离实现。实测风险面极低——agent loop 单线程、inline_eval 同步阻塞执行（不 yield），其窗口内主线程不并发，且 TMWebDriver/simphtml 等后台线程不做相对路径文件 IO（`code_run` 子进程用显式 `Popen(cwd=...)` 不受影响）。现有 `try/finally` 已保证恢复。强行改造收益 < 风险，故保留并记录。
 
 ---
 
