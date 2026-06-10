@@ -43,6 +43,13 @@ def get_system_prompt():
     prompt += get_global_memory()
     return prompt
 
+# 仅允许运行时调参字段，杜绝 /session.apikey= 等劫持 api_key/api_base/proxy/system
+_SESSION_SETTABLE = frozenset({
+    'reasoning_effort', 'service_tier', 'thinking_type', 'thinking_budget_tokens',
+    'temperature', 'max_tokens', 'max_retries', 'read_timeout', 'connect_timeout',
+    'stream', 'extra_sys_prompt',
+})
+
 class EulerAgent:
     def __init__(self):
         os.makedirs(os.path.join(script_dir, '../temp'), exist_ok=True)
@@ -114,6 +121,9 @@ class EulerAgent:
         if not raw_query.startswith('/'): return raw_query
         if _sm := re.match(r'/session\.(\w+)=(.*)', raw_query.strip()):
             k, v = _sm.group(1), _sm.group(2)
+            if k not in _SESSION_SETTABLE:
+                display_queue.put({'done': f"❌ 不允许设置 session.{k}（仅限运行时调参: {', '.join(sorted(_SESSION_SETTABLE))}）", 'source': 'system'})
+                return None
             vfile = os.path.join(script_dir, '../temp', v)
             if os.path.isfile(vfile): v = open(vfile, encoding='utf-8').read().strip()
             try: v = json.loads(v)  # cover number parsing
