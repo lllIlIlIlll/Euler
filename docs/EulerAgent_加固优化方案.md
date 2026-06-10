@@ -24,9 +24,9 @@
 | ✅ | P1 | F5 | 裸 `except:` 收敛为精确异常类型 | 分散但每处 1 行 |
 | ✅ | P2 | F6 | TMWebDriver `/link` token + agent_bbs 收紧网络暴露面 | 局部 |
 | ◐ | P2 | F7 | loop 内 `json.loads` 容错（done）；inline_eval `os.chdir`（评估保留） | 局部 |
-| ⬜ | P3 | F8 | 日志路径双轨统一；`file_access_stats` 并发安全；DEBUG 噪声 | 杂项 |
+| ✅ | P3 | F8 | 日志命名统一(pid)；`file_access_stats` 原子写；删 DEBUG 噪声 | 杂项 |
 
-> F1–F6 + F7b 已实现（commit `1a2af2f` / `b7160cf` / 本批）。下文各节"方案"为原始设计；F4/F5/F6/F7 的**实际落地说明**见对应章节末尾。
+> **全部实现完毕**（F7a 经评估保留，理由见 F7 章末）。commit 链：`1a2af2f`(P0) → `b7160cf`(P1) → `12326ab`(P2) → 本批(P3)。下文各节"方案"为原始设计；F4–F8 的**实际落地说明**见对应章节末尾。
 
 ---
 
@@ -166,6 +166,11 @@
 - **日志双轨统一**：`wire._write_llm_log` 默认 `model_responses_{pid}.txt`（[wire.py:35](../core/llm/wire.py)）vs `agentmain` 设的 `model_responses_{time%1e6}.txt`（[agentmain.py:56](../core/agentmain.py)）。`/resume`（[agentmain.py:124](../core/agentmain.py)）与 L4 归档按"最近修改文件尾部"找会话，两套命名混用可能拼接不完整会话。→ 统一为单一命名来源。
 - **`file_access_stats.json` 并发写覆盖**：`log_memory_access`（[ea.py:154-162](../core/ea.py)）read-modify-write，`--task` 子进程 + `--reflect` 调度进程并发时互相覆盖。→ 改 append-only 行日志或加文件锁（已 gitignore，仅影响统计可信度）。
 - **DEBUG 噪声**：`BaseSession.ask` 的 `if len(content_blocks) > 1: print([DEBUG ...])`（[sessions.py:98](../core/llm/sessions.py)）在正常多块响应时刷屏。→ 降级或加开关。
+
+> **实际落地（本批 commit）**：
+> - **F8a**：`agentmain.log_path` 由 `model_responses_{time%1e6}.txt` 改为 `model_responses_{pid}.txt`，与 `wire._write_llm_log` 默认一致 → 同进程只有一个日志文件，`/resume` 与 L4 归档不再因双轨命名拼接出残缺会话。
+> - **F8b**：`log_memory_access` 改原子写（写 `*.{pid}.tmp` 再 `os.replace`），并发的 task/reflect 进程读取时永不命中半写文件（实测 6 线程并发零 `JSONDecodeError`、无残留 tmp）。保留原 JSON 格式（无外部消费者，仅 ea.py 自用）；lost-update 对计数统计无害。
+> - **F8c**：删除 `BaseSession.ask` 的 `[DEBUG ...]` print —— `content_blocks>1` 是含 text+tool_use 的正常态，每个工具轮都触发刷屏且打印整个 blocks。
 
 ---
 

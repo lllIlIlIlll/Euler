@@ -180,7 +180,9 @@ def log_memory_access(path):
     except (FileNotFoundError, json.JSONDecodeError): stats = {}
     fname = os.path.basename(path)
     stats[fname] = {'count': stats.get(fname, {}).get('count', 0) + 1, 'last': datetime.now().strftime('%Y-%m-%d')}
-    with open(stats_file, 'w', encoding='utf-8') as f: json.dump(stats, f, indent=2, ensure_ascii=False)
+    tmp = f'{stats_file}.{os.getpid()}.tmp'  # atomic write: readers never see a half-written file (concurrent task/reflect procs)
+    with open(tmp, 'w', encoding='utf-8') as f: json.dump(stats, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, stats_file)
 
 def web_execute_js(script, switch_tab_id=None, no_monitor=False):
     """执行 JS 脚本来控制浏览器，并捕获结果和页面变化"""

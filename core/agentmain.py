@@ -60,7 +60,7 @@ class EulerAgent:
         self.is_running = False; self.stop_sig = False; self.llm_no = 0;  
         self.inc_out = False; self.verbose = True; self.show_mode = 'text'
         self.peer_hint = True; self.unattended = False  # task/reflect set True → block high-risk code_run
-        self.log_path = os.path.join(script_dir, f'../temp/model_responses/model_responses_{int(time.time()*1e6)%1000000:06d}.txt')
+        self.log_path = os.path.join(script_dir, f'../temp/model_responses/model_responses_{os.getpid()}.txt')  # match wire._write_llm_log default
         self.load_llm_sessions()
 
     def load_llm_sessions(self):
