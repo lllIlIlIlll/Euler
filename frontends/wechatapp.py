@@ -1,4 +1,4 @@
-import os, sys, re, threading, queue, time, socket, json, struct, base64, uuid, webbrowser, hashlib, math
+import asyncio, os, sys, re, threading, queue, time, json, struct, base64, uuid, webbrowser, hashlib, math
 from pathlib import Path
 from urllib.parse import quote
 import requests, qrcode
@@ -6,6 +6,7 @@ from Crypto.Cipher import AES
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _TEMP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'temp')
 from core.agentmain import EulerAgent
+from chatapp_common import AgentChatMixin, ensure_single_instance, redirect_log
 
 # ── WxBotClient (inline from wx_bot_client.py) ──
 for _k in ('HTTPS_PROXY', 'https_proxy'):
@@ -261,6 +262,13 @@ def _dl_media(items):
 agent = EulerAgent()
 agent.verbose = False
 
+class WxChat(AgentChatMixin):
+    label, source = 'WeChat', 'wechat'
+    async def send_text(self, chat_id, content, ctx=''):
+        await asyncio.to_thread(self.bot.send_text, chat_id, content, context_token=ctx)
+
+wxapp = WxChat(agent, {})
+
 _TAG_PATS = [r'<' + t + r'>.*?</' + t + r'>' for t in ('thinking', 'tool_use')]
 _TAG_PATS.append(r'<file_content>.*?</file_content>')
 
@@ -308,22 +316,8 @@ def on_message(bot, msg):
         text = (text + '\n' if text else '') + '\n'.join(f'[用户发送文件: {p}]' for p in media_paths)
     print(f'[WX] 收到: {text[:80]}', file=sys.__stdout__)
 
-    # Commands
-    if text in ('/stop', '/abort'):
-        agent.abort()
-        return
-    if text.startswith('/llm'):
-        args = text.split()
-        if len(args) > 1:
-            try:
-                n = int(args[1]); agent.next_llm(n)
-                bot.send_text(uid, f'切换到 [{agent.llm_no}] {agent.get_llm_name()}', context_token=ctx)
-            except (ValueError, IndexError):
-                bot.send_text(uid, f'用法: /llm <0-{len(agent.list_llms())-1}>', context_token=ctx)
-        else:
-            lines = [f"{'→' if cur else '  '} [{i}] {name}" for i, name, cur in agent.list_llms()]
-            bot.send_text(uid, 'LLMs:\n' + '\n'.join(lines), context_token=ctx)
-        return
+    if text.startswith('/') and not text.startswith('/review'):
+        return asyncio.run(wxapp.handle_command(uid, '/stop' if text == '/abort' else text, ctx=ctx))
 
     def _handle():
         prompt = text if text.startswith('/') else f"If you need to show files to user, use [FILE:filepath] in your response.\n\n{text}"
@@ -391,16 +385,14 @@ def on_message(bot, msg):
     threading.Thread(target=_handle, daemon=True).start()
 
 if __name__ == '__main__':
-    try: _lock = socket.socket(socket.AF_INET, socket.SOCK_STREAM); _lock.bind(('127.0.0.1', 19531))
-    except OSError: print('[WeChat] Another instance running, exiting.'); sys.exit(1)
-    _logf = open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'temp', 'wechatapp.log'), 'a', encoding='utf-8', buffering=1)
-    sys.stdout = sys.stderr = _logf
-    print(f'[NEW] Process starting {time.strftime("%m-%d %H:%M")}')
+    _lock = ensure_single_instance(19531, 'WeChat')
+    redirect_log(__file__, 'wechatapp.log', 'WeChat', None)
     bot = WxBotClient()
     if not bot.token:
         sys.stdout = sys.stderr = sys.__stdout__  # restore for QR display
         bot.login_qr()
-        sys.stdout = sys.stderr = _logf
+        redirect_log(__file__, 'wechatapp.log', 'WeChat', None)
+    wxapp.bot = bot
     threading.Thread(target=agent.run, daemon=True).start()
     print(f'WeChat Bot 已启动 (bot_id={bot.bot_id})', file=sys.__stdout__)
     bot.run_loop(on_message)
