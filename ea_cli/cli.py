@@ -1,119 +1,22 @@
-"""
-ea_cli/cli.py - EulerAgent 命令行分发系统
-
-通过 python -m ea_cli <命令> 或 ea <命令> 调用
-"""
+"""ea_cli/cli.py — EulerAgent 命令行分发（python -m ea_cli <命令> 或 ea <命令>）"""
 import os, sys, subprocess, argparse, textwrap
 
 # Windows GBK 终端兼容
 if sys.platform == "win32" and sys.stdout.encoding and sys.stdout.encoding.lower() in ("gbk", "gb2312"):
     sys.stdout.reconfigure(errors="replace") if hasattr(sys.stdout, "reconfigure") else None
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
-
-
-def _frontends():
-    return os.path.join(PROJECT_DIR, "frontends")
-
-def _reflect():
-    return os.path.join(PROJECT_DIR, "reflect")
-
-
-def launch_frontend(cmd_parts, args=None):
-    """启动前端/工具进程"""
-    full_cmd = []
-    for part in cmd_parts:
-        part = part.replace("{PROJECT_DIR}", PROJECT_DIR)
-        part = part.replace("{FRONTENDS}", _frontends())
-        part = part.replace("{REFLECT}", _reflect())
-        full_cmd.append(part)
-
-    # 插入额外参数
-    if args:
-        full_cmd.extend(args)
-
-    print(f"🚀 {' '.join(full_cmd)}")
-    sys.stdout.flush()
-    os.chdir(PROJECT_DIR)
-    proc = subprocess.Popen(full_cmd)
-    try:
-        proc.wait()
-    except KeyboardInterrupt:
-        proc.terminate()
-        sys.exit(0)
-
-
-COMMANDS = {
-    "gui": {
-        "help": "启动桌面GUI (qtapp)",
-        "desc": "启动基于 PyQt5 的完整桌面聊天界面（气泡代码高亮、文件拖拽、历史搜索）",
-        "cmd": ["python", "{FRONTENDS}/qtapp.py"],
-    },
-    "configure": {
-        "help": "运行初始配置向导 (configure_ekey.py)",
-        "desc": "首次安装后配置 API Key、模型参数等基础设置",
-        "cmd": ["python", "{PROJECT_DIR}/assets/scripts/configure_ekey.py"],
-    },
-    "hub": {
-        "help": "启动 Hub 管理器 (launcher)",
-        "desc": "启动 hub 前端管理面板（系统托盘 + 浏览器界面）",
-        "cmd": ["python", "{PROJECT_DIR}/hub.pyw"],
-    },
-    "tui": {
-        "help": "启动终端 TUI (tuiapp)",
-        "desc": "启动终端图形界面（Textual），适合纯终端环境或 SSH",
-        "cmd": ["python", "{FRONTENDS}/tuiapp.py"],
-    },
-    "cli": {
-        "help": "启动 CLI 对话 (agentmain)",
-        "desc": "启动命令行交互对话模式，最轻量的使用方式",
-        "cmd": ["python", "{PROJECT_DIR}/core/agentmain.py"],
-    },
-    "launch": {
-        "help": "启动 webview 桌面壳 (launch.pyw)",
-        "desc": "以原生窗口形式包装 stapp Web 界面（基于 pywebview）",
-        "cmd": ["python", "{PROJECT_DIR}/launch.pyw"],
-    },
-    "status": {
-        "help": "检查运行状态",
-        "desc": "检查当前是否已有 EulerAgent 进程在运行",
-        "cmd": None,
-        "internal": True,
-    },
-    "update": {
-        "help": "更新项目 (git pull + pip install)",
-        "desc": "从 Git 拉取最新代码并更新依赖",
-        "cmd": None,
-        "internal": True,
-    },
-    "list": {
-        "help": "列出所有可用前端/服务",
-        "desc": "显示所有注册的命令",
-        "cmd": None,
-        "internal": True,
-    },
-}
+PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def cmd_list():
-    """展示所有可用命令"""
-    print()
-    frontend_cmds = [(k, v) for k, v in sorted(COMMANDS.items()) if v["cmd"] is not None]
-    internal_cmds = [(k, v) for k, v in sorted(COMMANDS.items()) if v["cmd"] is None]
-
-    print(f"  {'命令':20s}  {'说明'}")
-    print(f"  {'━'*20}  {'━'*40}")
-    for name, info in frontend_cmds:
-        print(f"  {name:20s}  {info.get('help', info['desc'][:40])}")
-    print()
-    for name, info in internal_cmds:
-        print(f"  {name:20s}  {info.get('help', info['desc'][:40])}")
+    print(f"\n  {'命令':12s}  说明")
+    print(f"  {'━' * 12}  {'━' * 40}")
+    for name, (help_, action) in sorted(COMMANDS.items(), key=lambda kv: (callable(kv[1][1]), kv[0])):
+        print(f"  {name:12s}  {help_}")
     print()
 
 
 def cmd_status():
-    """检查进程状态"""
     import psutil
     running = [p for p in psutil.process_iter(['pid', 'name', 'cmdline'])
                if p.info['cmdline'] and any('agentmain' in c for c in p.info['cmdline'])]
@@ -126,7 +29,6 @@ def cmd_status():
 
 
 def cmd_update():
-    """git pull + pip install"""
     os.chdir(PROJECT_DIR)
     print("🔄 git pull...")
     r = subprocess.run(["git", "pull"], capture_output=True, text=True)
@@ -134,83 +36,69 @@ def cmd_update():
     if r.returncode != 0:
         print(r.stderr)
     print("📦 pip install...")
-    r2 = subprocess.run([sys.executable, "-m", "pip", "install", "-e", "."],
-                        capture_output=True, text=True)
+    r2 = subprocess.run([sys.executable, "-m", "pip", "install", "-e", "."], capture_output=True, text=True)
     print(r2.stdout[-500:] if r2.stdout else "")
     if r2.returncode != 0:
         print(r2.stderr[-500:])
 
 
+COMMANDS = {  # 名称: (说明, python argv 相对项目根 | 无参可调用)
+    "gui":       ("启动桌面 GUI (qtapp)",              ["frontends/qtapp.py"]),
+    "web":       ("启动 Streamlit Web 界面 (stapp2)",  ["-m", "streamlit", "run", "frontends/stapp2.py"]),
+    "tui":       ("启动终端 TUI (tuiapp_v2)",          ["frontends/tuiapp_v2.py"]),
+    "cli":       ("启动命令行对话 (agentmain)",        ["core/agentmain.py"]),
+    "launch":    ("启动 webview 桌面壳 (launch.pyw)",  ["launch.pyw"]),
+    "hub":       ("启动 Hub 服务管理面板 (hub.pyw)",   ["hub.pyw"]),
+    "configure": ("运行初始配置向导 (configure_ekey)", ["assets/scripts/configure_ekey.py"]),
+    "status":    ("检查运行状态", cmd_status),
+    "update":    ("更新项目 (git pull + pip install)", cmd_update),
+    "list":      ("列出所有命令", cmd_list),
+}
+
+
+def launch(argv, extra):
+    cmd = [sys.executable] + argv + extra
+    print(f"🚀 {' '.join(cmd)}")
+    sys.stdout.flush()
+    os.chdir(PROJECT_DIR)
+    proc = subprocess.Popen(cmd)
+    try:
+        proc.wait()
+    except KeyboardInterrupt:
+        proc.terminate()
+        sys.exit(0)
+
+
 def main():
     parser = argparse.ArgumentParser(
-        prog="ea",
-        description="EulerAgent 全局命令入口",
+        prog="ea", description="EulerAgent 全局命令入口",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent("""\
             示例:
-              ea gui               启动桌面 GUI
-              ea tui               启动终端 TUI
-              ea cli               启动命令行对话
-              ea launch            启动 webview 桌面壳
-              ea list              列出所有命令
-        """),
-    )
+              ea gui       启动桌面 GUI
+              ea web       启动 Streamlit Web 界面
+              ea tui       启动终端 TUI
+              ea cli       启动命令行对话
+              ea list      列出所有命令
+        """))
     parser.add_argument("command", nargs="?", help="命令名")
     parser.add_argument("args", nargs="*", help="子命令参数")
     parser.add_argument("-v", "--version", action="store_true", help="显示版本")
-
     args, unknown = parser.parse_known_args()
 
     if args.version:
-        print("EulerAgent v0.1.0")
-        return
-
-    cmd = args.command
-
-    if not cmd or cmd == "help":
+        return print("EulerAgent v0.1.0")
+    if not args.command or args.command == "help":
         parser.print_help()
-        print("\n--- 命令列表 ---")
-        cmd_list()
-        return
-
-    if cmd == "list":
-        cmd_list()
-        return
-
-    if cmd == "status":
-        cmd_status()
-        return
-
-    if cmd == "update":
-        cmd_update()
-        return
-
-    if cmd not in COMMANDS:
-        print(f"❌ 未知命令: {cmd}")
-        print(f"   使用 'ea list' 查看可用命令")
+        return cmd_list()
+    entry = COMMANDS.get(args.command)
+    if not entry:
+        print(f"❌ 未知命令: {args.command}（用 'ea list' 查看可用命令）")
         sys.exit(1)
-
-    info = COMMANDS[cmd]
-
-    # 内置命令走内部逻辑
-    if info.get("internal"):
-        print(f"❌ 命令 {cmd} 没有配置启动命令")
-        sys.exit(1)
-
-    extra = list(args.args) + unknown
-
-    # === 处理命令特有 flags ===
-    cmd_parts = list(info["cmd"])
-
-    # 处理 flags (如 --native)
-    flags = info.get("flags", {})
-    for flag_name, flag_info in flags.items():
-        if flag_name in extra:
-            cmd_parts = list(flag_info["cmd"])
-            extra.remove(flag_name)
-            break
-
-    launch_frontend(cmd_parts, extra if extra else None)
+    action = entry[1]
+    if callable(action):
+        return action()
+    launch(action, list(args.args) + unknown)
 
 
 if __name__ == "__main__":
