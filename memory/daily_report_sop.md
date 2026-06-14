@@ -132,6 +132,15 @@ LLM 整编完成后输出 `report_data.json`，结构如下：
 }
 ```
 
+### 2.3c 写盘方式（硬约束，违反即任务中断风险）
+
+> 坑#7/#12 的经验，v3.1 由"踩坑记录"升级为 Phase 2 强制步骤。
+
+- `[MUST]` **禁止把完整 `report_data.json` 作为单轮回复内容直接输出**（无论作正文还是单个大代码块）。大块内容会触发 SSE 流截断，连续截断会使引擎判定失败并中断任务（需用户手动"继续"接力）。
+- `[MUST]` **必须用 `code_run` 分板块追加写入**：先写骨架（date/window + 空板块），再逐个 `s1_items → s2_items → s3_hot → s3_clues → trends → signals` 用小代码块 append/更新，每步只携带一个板块的数据。
+- `[SHOULD]` 单次 `code_run` 写入体量控制在数 KB 内；若某板块条目多，再拆成多次写入。
+- 写完后用 `file_read` 抽查 `report_data.json` 完整性，再进入 Phase 3 渲染。
+
 **渲染**: `python daily_report_render.py report_data.json --fmt all --output-dir output/daily_yyyymmdd`  # DOCX用系统py3.10运行
 **自检**: `python daily_report_validate.py report_data.json --strict`
 

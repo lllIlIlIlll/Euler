@@ -299,6 +299,9 @@ capabilities:
 
 ### E.2 双格式输出规则
 
+> **[v3.1 执行提示]** 本节为 v1.8 原文存档。实际执行以 SOP v3.1 为准：LLM 只输出 `report_data.json`，由 `daily_report_render.py` 渲染 md/docx/html。
+> `[MUST]` 写 `report_data.json` 及任何大文件时，**禁止整块作为单轮回复内容输出**（会触发流截断、导致任务中断），必须按 **SOP §2.3c** 用 `code_run` 分板块追加写入。
+
 `[MUST]` 任务完成后，须同时生成以下两种格式，内容完全一致、排版规范：
 
 - **Markdown（`.md`）**：直接生成，严格遵循本指令格式要求，编码 UTF-8。

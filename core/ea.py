@@ -298,7 +298,6 @@ class EulerAgentHandler(BaseHandler):
         self.cwd = cwd;  self.current_turn = 0
         self.history_info = last_history if last_history else []
         self.code_stop_signal = []
-        self._done_hooks = []
 
     def _get_abs_path(self, path):
         if not path: return ""
@@ -582,6 +581,7 @@ class EulerAgentHandler(BaseHandler):
         return prompt
     
     def turn_end_callback(self, response, tool_calls, tool_results, turn, next_prompt, exit_reason):
+        if tool_calls and tool_calls[0]['tool_name'] != 'no_tool': self._empty_ct = 0  # 真实工具轮 → 截断计数归零，恢复"连续失败"语义
         _c = re.sub(r'```.*?```|<thinking>.*?</thinking>', '', response.content, flags=re.DOTALL)
         rsumm = re.search(r"<summary>(.*?)</summary>", _c, re.DOTALL)
         if rsumm: summary = rsumm.group(1).strip()

@@ -25,7 +25,6 @@ class ScriptedClient:
 class Handler(BaseHandler):
     def __init__(self):
         self.parent = types.SimpleNamespace(task_dir=None)
-        self._done_hooks = []
     def do_step(self, args, response):
         yield ""
         return StepOutcome({"n": 1}, next_prompt="continue")
