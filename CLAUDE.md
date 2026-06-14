@@ -12,8 +12,8 @@ EulerAgent is a minimal (~3K lines), self-evolving autonomous agent framework th
 EulerAgent/
 ├── core/                     # Core code modules
 │   ├── agentmain.py          # Application entry point
-│   ├── agent_loop.py         # Loop engine (~136 lines)
-│   ├── ea.py                 # Tool implementations (~627 lines)
+│   ├── agent_loop.py         # Loop engine
+│   ├── ea.py                 # Tool implementations
 │   ├── llm/                  # LLM adapter package (layered, single-direction deps)
 │   │   ├── __init__.py       #   public facade (re-exports the layers)
 │   │   ├── config.py         #   ekey loading + safeprint
@@ -32,12 +32,18 @@ EulerAgent/
 ├── assets/                   # Resource configuration
 │   ├── images/, demo/        # Media assets
 │   └── *.json                # Schema configs (tools_schema.json, etc.)
-├── temp/                     # Runtime temporary files
+├── temp/                     # Runtime temp files (gitignored; dated one-off reports go HERE, never docs/)
 ├── frontends/                # Multiple UI frontends
 │   ├── stapp2.py             # Streamlit frontend
-│   ├── tuiapp.py             # Textual TUI frontend
+│   ├── tuiapp_v2.py          # Textual TUI frontend (main; tuiapp.py is legacy)
+│   ├── chatapp_common.py     # Shared bot base (AgentChatMixin: commands, run loop, helpers)
 │   └── *.py                  # Bot frontends (telegram, qq, wechat, etc.)
-└── TMWebDriver.py            # Browser control (root level)
+├── reflect/                  # Autonomous/goal modes, scheduler, team worker
+├── plugins/                  # Hook + tracing plugins
+├── ea_cli/                   # Single CLI entry — all frontends as `ea <cmd>` subcommands (root `ea`/`ea.cmd` are shims)
+├── docs/                     # Durable docs only (installation, setup guides)
+├── simphtml.py               # HTML simplifier (root level — imported by core/ea.py)
+└── TMWebDriver.py            # Browser control (root level — imported by core/ea.py)
 ```
 
 **Critical**: `memory/`, `assets/`, `temp/` stay at project root — NOT inside `core/`. The `core/` modules reference them via `../assets`, `../memory`, `../temp` relative paths.
@@ -82,11 +88,14 @@ CONTRIBUTING.md is authoritative when in doubt. These are rules, not guidelines.
 ```bash
 # Python version: 3.10-3.13 only (NOT 3.14 — incompatible with pywebview)
 
+# Single entry — every frontend is an `ea` subcommand:
+./ea list   # gui / web / tui / cli / launch / hub / configure / status / update
+
 # Run Streamlit frontend
 streamlit run frontends/stapp2.py
 
 # Run TUI frontend
-python frontends/tuiapp.py
+python frontends/tuiapp_v2.py
 
 # Run desktop app
 python launch.pyw
@@ -131,15 +140,21 @@ os.path.join(script_dir, '../temp/...')     # NOT 'temp/...'
 
 ## Import Notes
 
-`core/agentmain.py` inserts `core/` itself at the front of `sys.path`, so sibling
-modules import by bare name — there is **no** `core.` package prefix anywhere in the repo:
+Two import styles coexist, split at the `core/` boundary:
 
 ```python
+# Inside core/: agentmain.py inserts core/ at the front of sys.path,
+# so siblings import by bare name — no `core.` prefix within core/.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # core/ becomes top-level
 from llmcore import reload_ekeys, LLMSession, ...   # core/llmcore.py (shim → llm package)
 from agent_loop import agent_runner_loop            # core/agent_loop.py
-from ea import EulerAgentHandler                    # core/ea.py
+
+# Outside core/ (frontends/, reflect/, plugins/): insert the PROJECT ROOT, then:
+from core.agentmain import EulerAgent
 ```
+
+`core/ea.py` also imports root-level `simphtml` and `TMWebDriver` — both `agentmain.py`
+and `ea.py` append the project root to `sys.path` themselves to make this work.
 
 `llmcore` is a compatibility shim; the implementation lives in the `core/llm/` package.
 

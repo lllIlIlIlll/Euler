@@ -1,1 +1,23 @@
 # [Global Memory - L2]
+
+## User Preferences
+- **报告输出**: 要求报告/文档/设计/方案时 → 自动在 `docs/` 目录输出 Claude 风格 HTML(含PDF)。设计规范见 L3: `claude_html_theme.md`
+
+## Daily Report Pipeline
+- 脚本: `./temp/daily.sh` (3阶段orchestrator: collect→render→validate, R25无参兼容launchd/cron: 默认今日DATE+all phases) + 配套: `daily_query.py`(SQLite)/`fetch_bing_news.py`(RSS)/`daily_report_render.py`(三件套)/`daily_report_validate.py`(E.4-E.5自检)
+- 定时任务: `./temp/com.agent.dailyreport.plist` (launchd持久化, R23起; 配 `launchd_wrapper.sh` 注入动态DATE/PHASE, RunAtLoad=true, 见launchd_blockers.md)
+- **输出目录约束(硬)**: 三件套必须输出到 `./temp/output/daily_yyyymmdd/` (render.py原生支持 `--output-dir`, validate/report_data.json也放此目录)
+- 避坑见 L3: `daily_report_sop.md`
+
+## Cross-Verify Tool (H4硬约束解)
+- 脚本: `./temp/cross_verify.py` (双源交叉核验,解H4硬约束)
+- 核验源: Google News RSS + Bing News (无需API key)
+- 涉华政策识别: 40+关键词正则,显式标记 `is_china_policy`
+- 英文查询提取: `_extract_english_query()` 从URL slug提取英文关键词(中文查询在英文RSS源无效)
+- 回放结果: 4/4 S1涉华条目 ≥2独立源命中, 置信度76-78
+- 避坑: (1) `root.iter()`返回iterator不能slice,需`list()[:n]` (2) 中文查询Google/Bing RSS返回0结果,必须转英文
+
+## Environment
+- **Python解释器split**: `code_run`/默认 `python3` → `.venv/python3.13` (无python-docx等重依赖); 重依赖装在系统 `/opt/homebrew/opt/python@3.10/bin/python3.10`
+- **DOCX生成**: render.py 需 python-docx, 必须用系统python3.10运行: `/opt/homebrew/opt/python@3.10/bin/python3.10 ../memory/daily_report_render.py report_data.json --fmt docx` (.venv会报"not installed")
+- **pip install 到错解释器**: 裸 `pip install` 默认进系统3.10; `.venv` 需 `/Users/x403/EulerAgent/.venv/bin/pip install`
